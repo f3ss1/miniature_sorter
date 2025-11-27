@@ -26,5 +26,7 @@ def test_valid_image_detection():
 
 
 def test_image_is_being_moved():
-    file_path = PROJECT_ROOT / "test_miniature/1014_Zombified Elf"
-    CastNPlayConnector(year_month="2025.11", rar_handler=RarHandler()).process_model_folder(file_path)
+    file_path = PROJECT_ROOT / "release/test_miniature/1014_Zombified Elf"
+    CastNPlayConnector(general_output_location=PROJECT_ROOT / "result", rar_handler=RarHandler()).process_model_folder(
+        file_path,
+    )
