@@ -8,6 +8,7 @@ from miniature_sorter import logger
 from miniature_sorter.constants import PROJECT_ROOT
 from miniature_sorter.rar_handler import RarHandler
 
+
 class CastNPlayConnector:
     IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"}
 
@@ -46,12 +47,12 @@ class CastNPlayConnector:
         model_folder_path: Path,
     ):
         model_name = self._gather_filename(model_folder_path)
-        #self._process_unsupported(
+        # self._process_unsupported(
         #    model_folder_path=model_folder_path,
         #    rar_handler=self.rar_handler,
         #    model_name=model_name,
         #    unsupported_location=self.unsupported_location,
-        #)
+        # )
 
         self._process_supported(
             model_folder_path=model_folder_path,
@@ -78,8 +79,12 @@ class CastNPlayConnector:
         logger.debug(f"Finished moving image: {os.listdir(new_folder_location)}")
 
         os.mkdir(new_folder_location / "Model")
-        shutil.copytree(model_folder_path / unsupported_location, new_folder_location / "Model", dirs_exist_ok=True)
-        logger.debug(f"Finished moving unsupported files: {os.listdir(new_folder_location / "Model")}")
+        shutil.copytree(
+            model_folder_path / unsupported_location,
+            new_folder_location / "Model",
+            dirs_exist_ok=True,
+        )
+        logger.debug(f"Finished moving unsupported files: {os.listdir(new_folder_location / 'Model')}")
         rar_handler.compress(new_folder_location, PROJECT_ROOT / "result.rar")
 
     @classmethod
@@ -101,15 +106,21 @@ class CastNPlayConnector:
         logger.debug(f"Finished moving image: {os.listdir(new_folder_location)}")
 
         os.mkdir(new_folder_location / "Model")
-        shutil.copytree(model_folder_path / presupported_location_stl, new_folder_location / "Model/STL", dirs_exist_ok=True)
-        logger.debug(f"Finished moving presupported STL files: {os.listdir(new_folder_location / "Model/STL")}")
+        shutil.copytree(
+            model_folder_path / presupported_location_stl,
+            new_folder_location / "Model/STL",
+            dirs_exist_ok=True,
+        )
+        logger.debug(f"Finished moving presupported STL files: {os.listdir(new_folder_location / 'Model/STL')}")
 
-        shutil.copytree(model_folder_path / presupported_location_lys, new_folder_location / "Model/LYS", dirs_exist_ok=True)
-        logger.debug(f"Finished moving presupported LYS files: {os.listdir(new_folder_location / "Model/LYS")}")
+        shutil.copytree(
+            model_folder_path / presupported_location_lys,
+            new_folder_location / "Model/LYS",
+            dirs_exist_ok=True,
+        )
+        logger.debug(f"Finished moving presupported LYS files: {os.listdir(new_folder_location / 'Model/LYS')}")
 
         rar_handler.compress(new_folder_location, PROJECT_ROOT / "result.rar")
-
-
 
     @classmethod
     def detect_image_location(cls, filepath: Path) -> Path:
