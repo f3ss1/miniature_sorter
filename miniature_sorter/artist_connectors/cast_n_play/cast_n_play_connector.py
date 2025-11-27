@@ -3,7 +3,6 @@ import shutil
 import os
 
 from miniature_sorter import logger
-from miniature_sorter.constants import PROJECT_ROOT
 from miniature_sorter.rar_handler import RarHandler
 
 
@@ -34,12 +33,11 @@ class CastNPlayConnector:
             image_location,
             self.general_output_location / f"{clean_model_name}{image_location.suffix}",
         )
-        # self._process_unsupported(
-        #    model_folder_path=model_folder_path,
-        #    rar_handler=self.rar_handler,
-        #    model_name=model_name,
-        #    unsupported_location=self.unsupported_location,
-        # )
+        self._process_unsupported(
+            model_folder_path=model_folder_path,
+            general_output_location=self.general_output_location,
+            unsupported_location=self.unsupported_location,
+        )
 
         self._process_supported(
             model_folder_path=model_folder_path,
@@ -52,25 +50,27 @@ class CastNPlayConnector:
     def _process_unsupported(
         cls,
         model_folder_path: Path,
-        rar_handler: RarHandler,
-        model_name: str,
+        general_output_location: Path,
         unsupported_location: str,
-        tmpdir: Path,
     ) -> None:
-        original_image_location = cls.detect_image_location(model_folder_path)
-        new_folder_location = tmpdir / model_name
-        os.mkdir(new_folder_location)
-        shutil.copy2(original_image_location, new_folder_location / f"{model_name}{original_image_location.suffix}")
-        logger.debug(f"Finished moving image: {os.listdir(new_folder_location)}")
+        model_name = cls._gather_filename(model_folder_path)
 
-        os.mkdir(new_folder_location / "Model")
+        output_model_location = general_output_location / "Unsupported" / model_name
+        output_model_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
+
+        original_image_location = cls.detect_image_location(model_folder_path)
+        shutil.copy2(original_image_location, output_model_location / f"{model_name}{original_image_location.suffix}")
+        logger.debug(f"Finished moving image: {os.listdir(output_model_location)}")
+
+        output_model_files_location = output_model_location / "Models"
+        output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
+
         shutil.copytree(
             model_folder_path / unsupported_location,
-            new_folder_location / "Model",
-            dirs_exist_ok=True,
+            output_model_files_location,
+            dirs_exist_ok=True,  # TODO: replace when finished testing
         )
-        logger.debug(f"Finished moving unsupported files: {os.listdir(new_folder_location / 'Model')}")
-        rar_handler.compress(new_folder_location, PROJECT_ROOT / "result.rar")
+        logger.debug(f"Finished moving unsupported STL files: {os.listdir(output_model_files_location)}")
 
     @classmethod
     def _process_supported(
