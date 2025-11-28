@@ -19,4 +19,4 @@ logger.add(
 )
 
 # TODO: replace with bind.
-logger.configure(extra={"user_id": "ssl_exception_bot"})  # Default values
+logger.configure(extra={"user_id": "miniature_sorter"})  # Default values
