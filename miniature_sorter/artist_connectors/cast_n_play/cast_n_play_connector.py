@@ -22,9 +22,22 @@ class CastNPlayConnector:
         self,
         release_path: Path,
         output_path: Path,
+        details_dict: dict[str, list[str]] | None = None,
     ) -> None:
-        (output_path / "Unsupported").mkdir(exist_ok=True)
-        (output_path / "Presupported").mkdir(exist_ok=True)
+        if details_dict is None:
+            details_dict = {}
+        if "Characters" in details_dict:
+            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict["Characters"]}")
+            del details_dict["Characters"]
+
+        reversed_details_dict = self.reverse_dict_with_list_values(details_dict)
+
+        for key in details_dict:
+            (output_path / key / "Unsupported").mkdir(exist_ok=True, parents=True)
+            (output_path / key / "Presupported").mkdir(exist_ok=True, parents=True)
+
+        (output_path / "Characters" / "Unsupported").mkdir(exist_ok=True, parents=True)
+        (output_path / "Characters" / "Presupported").mkdir(exist_ok=True, parents=True)
 
         for file_or_folder in release_path.iterdir():
             if file_or_folder.is_file():
@@ -32,7 +45,10 @@ class CastNPlayConnector:
                 continue
 
             model_folder = file_or_folder
-            self.process_model_folder(model_folder, output_path)
+            model_type = reversed_details_dict.get(model_folder, "Characters")
+            self.process_model_folder(model_folder, output_path / model_type)
+
+    # TODO: add process throwback
 
     def process_model_folder(
         self,
@@ -160,3 +176,20 @@ class CastNPlayConnector:
         except ValueError as e:
             logger.error(f"Failed to gather model name for folder {filepath}:\n{e}")
             raise e
+
+    @staticmethod
+    def reverse_dict_with_list_values(d: dict) -> dict:
+        if d == {}:
+            return {}
+
+        result = {}
+        for key, value in d.items():
+            for item in value:
+                if item in result:
+                    existing_key = result[item]
+                    raise ValueError(
+                        f"Value duplication ({item}) detected when trying to reverse dict: {existing_key}, {key}!",
+                    )
+                result[item] = key
+
+        return result
