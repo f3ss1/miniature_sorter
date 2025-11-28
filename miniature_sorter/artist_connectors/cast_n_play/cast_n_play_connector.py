@@ -3,7 +3,6 @@ import shutil
 import os
 
 from miniature_sorter import logger
-from miniature_sorter.rar_handler import RarHandler
 
 
 class CastNPlayConnector:
@@ -11,37 +10,51 @@ class CastNPlayConnector:
 
     def __init__(
         self,
-        general_output_location: Path,
-        rar_handler: RarHandler,
         unsupported_location: str = "STL/",
         presupported_location_stl: str = "Pre-Supported/STL/",
         presupported_location_lys: str = "Pre-Supported/LYS/",
     ):
-        self.general_output_location = general_output_location
-        self.rar_handler = rar_handler
         self.unsupported_location = unsupported_location
         self.presupported_location_stl = presupported_location_stl
         self.presupported_location_lys = presupported_location_lys
 
+    def process_release(
+        self,
+        release_path: Path,
+        output_path: Path,
+    ) -> None:
+        (output_path / "Unsupported").mkdir(exist_ok=True)
+        (output_path / "Presupported").mkdir(exist_ok=True)
+
+        for file_or_folder in release_path.iterdir():
+            if file_or_folder.is_file():
+                logger.debug(f"Skipping file {file_or_folder} as it is not a folder with model.")
+                continue
+
+            model_folder = file_or_folder
+            self.process_model_folder(model_folder, output_path)
+
     def process_model_folder(
         self,
         model_folder_path: Path,
-    ):
+        output_path: Path,
+    ) -> None:
         clean_model_name = self._gather_filename(model_folder_path)
         image_location = self.detect_image_location(model_folder_path)
         shutil.copy2(
             image_location,
-            self.general_output_location / f"{clean_model_name}{image_location.suffix}",
+            output_path / f"{clean_model_name}{image_location.suffix}",
         )
         self._process_unsupported(
             model_folder_path=model_folder_path,
-            general_output_location=self.general_output_location,
+            general_output_location=output_path,
             unsupported_location=self.unsupported_location,
         )
 
+        # TODO: can be missing for bases for example
         self._process_supported(
             model_folder_path=model_folder_path,
-            general_output_location=self.general_output_location,
+            general_output_location=output_path,
             presupported_location_stl=self.presupported_location_stl,
             presupported_location_lys=self.presupported_location_lys,
         )
@@ -141,6 +154,7 @@ class CastNPlayConnector:
         """
         try:
             model_id, filename = filepath.name.split("_")
+            model_id = int(model_id)
             return f"{model_id}. {filename}"
 
         except ValueError as e:
