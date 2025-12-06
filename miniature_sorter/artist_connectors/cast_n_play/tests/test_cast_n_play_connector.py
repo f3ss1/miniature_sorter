@@ -30,3 +30,11 @@ def test_image_is_being_moved():
     CastNPlayConnector(general_output_location=PROJECT_ROOT / "result", rar_handler=RarHandler()).process_model_folder(
         file_path,
     )
+
+
+def test_throwback():
+    file_path = PROJECT_ROOT / "small_release"
+    CastNPlayConnector().process_throwback(
+        file_path,
+        PROJECT_ROOT / "result",
+    )

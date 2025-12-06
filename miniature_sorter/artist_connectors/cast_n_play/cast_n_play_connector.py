@@ -7,6 +7,11 @@ from miniature_sorter import logger
 
 class CastNPlayConnector:
     IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"}
+    MODEL_EXTENSIONS_MAP = {
+        ".stl": "STL",
+        ".lys": "LYS",
+        ".chitu": "CHITU",
+    }
 
     def __init__(
         self,
@@ -15,8 +20,8 @@ class CastNPlayConnector:
         presupported_location_lys: str = "Pre-Supported/LYS/",
     ):
         self.unsupported_location = unsupported_location
-        self.presupported_location_stl = presupported_location_stl
-        self.presupported_location_lys = presupported_location_lys
+        self.presupported_location_stl = Path(presupported_location_stl)
+        self.presupported_location_lys = Path(presupported_location_lys)
 
     def process_release(
         self,
@@ -27,17 +32,11 @@ class CastNPlayConnector:
         if details_dict is None:
             details_dict = {}
         if "Characters" in details_dict:
-            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict["Characters"]}")
+            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict['Characters']}")
             del details_dict["Characters"]
 
         reversed_details_dict = self.reverse_dict_with_list_values(details_dict)
-
-        for key in details_dict:
-            (output_path / key / "Unsupported").mkdir(exist_ok=True, parents=True)
-            (output_path / key / "Presupported").mkdir(exist_ok=True, parents=True)
-
-        (output_path / "Characters" / "Unsupported").mkdir(exist_ok=True, parents=True)
-        (output_path / "Characters" / "Presupported").mkdir(exist_ok=True, parents=True)
+        self.prepare_folders(output_path, details_dict)
 
         for file_or_folder in release_path.iterdir():
             if file_or_folder.is_file():
@@ -48,7 +47,35 @@ class CastNPlayConnector:
             model_type = reversed_details_dict.get(model_folder, "Characters")
             self.process_model_folder(model_folder, output_path / model_type)
 
-    # TODO: add process throwback
+    def process_throwback(
+        self,
+        throwback_path: Path,
+        output_path: Path,
+        details_dict: dict[str, list[str]] | None = None,
+    ) -> None:
+        if details_dict is None:
+            details_dict = {}
+        if "Characters" in details_dict:
+            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict['Characters']}")
+            del details_dict["Characters"]
+
+        reversed_details_dict = self.reverse_dict_with_list_values(details_dict)
+        self.prepare_folders(output_path, details_dict)
+
+        for file_or_folder in throwback_path.iterdir():
+            if file_or_folder.is_file():
+                logger.debug(f"Skipping file {file_or_folder} as it is not a folder with model.")
+                continue
+
+            # Find the required depth. Sometimes there is a folder in folder (perhaps in a folder)
+            model_folder = file_or_folder
+            model_name = model_folder.name
+            while len(os.listdir(model_folder)) == 1 and os.listdir(model_folder)[0] == model_name:
+                logger.info(f"Going deeper to {model_folder / model_name}.")
+                model_folder = model_folder / model_name
+
+            model_type = reversed_details_dict.get(model_folder, "Characters")
+            self.process_model_folder(model_folder, output_path / model_type)
 
     def process_model_folder(
         self,
@@ -71,8 +98,10 @@ class CastNPlayConnector:
         self._process_supported(
             model_folder_path=model_folder_path,
             general_output_location=output_path,
-            presupported_location_stl=self.presupported_location_stl,
-            presupported_location_lys=self.presupported_location_lys,
+            presupported_locations={
+                "STL": self.presupported_location_stl,
+                "LYS": self.presupported_location_lys,
+            },
         )
 
     @classmethod
@@ -106,8 +135,7 @@ class CastNPlayConnector:
         cls,
         model_folder_path: Path,
         general_output_location: Path,
-        presupported_location_stl: str,
-        presupported_location_lys: str,
+        presupported_locations: dict[str, Path],
     ):
         model_name = cls._gather_filename(model_folder_path)
         output_model_location = general_output_location / "Presupported" / model_name
@@ -120,19 +148,42 @@ class CastNPlayConnector:
         output_model_files_location = output_model_location / "Models"
         output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
 
-        shutil.copytree(
-            model_folder_path / presupported_location_stl,
-            output_model_files_location / "STL",
-            dirs_exist_ok=True,  # TODO: replace when finished testing
-        )
-        logger.debug(f"Finished moving presupported STL files: {os.listdir(output_model_files_location / 'STL')}")
+        for location in presupported_locations.values():
+            if (model_folder_path / location).exists():
+                cls.process_separated(model_folder_path, output_model_files_location, presupported_locations)
+                break
+        else:
+            cls.process_mixed(model_folder_path / "Pre-Supported", output_model_files_location)
 
-        shutil.copytree(
-            model_folder_path / presupported_location_lys,
-            output_model_files_location / "LYS",
-            dirs_exist_ok=True,  # TODO: replace when finished testing
-        )
-        logger.debug(f"Finished moving presupported LYS files: {os.listdir(output_model_files_location / 'LYS')}")
+    @classmethod
+    def process_mixed(
+        cls,
+        folder_path: Path,
+        output_path: Path,
+    ):
+        for model_extension in cls.MODEL_EXTENSIONS_MAP.keys():
+            for path in folder_path.rglob(f"*{model_extension}"):
+                rel = path.relative_to(folder_path)
+                target = output_path / cls.MODEL_EXTENSIONS_MAP[model_extension] / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+
+    @classmethod
+    def process_separated(
+        cls,
+        folder_path: Path,
+        output_path: Path,
+        presupported_locations: dict[str, Path],
+    ):
+        for file_type, location in presupported_locations.items():
+            shutil.copytree(
+                folder_path / location,
+                output_path / file_type.upper(),
+                dirs_exist_ok=True,  # TODO: replace when finished testing
+            )
+            logger.debug(
+                f"Finished moving presupported .{file_type} files: {os.listdir(output_path / file_type.upper())}",
+            )
 
     @classmethod
     def detect_image_location(cls, filepath: Path) -> Path:
@@ -193,3 +244,15 @@ class CastNPlayConnector:
                 result[item] = key
 
         return result
+
+    @staticmethod
+    def prepare_folders(
+        output_path: Path,
+        details_dict: dict[str, list[str]],
+    ) -> None:
+        for key in details_dict:
+            (output_path / key / "Unsupported").mkdir(exist_ok=True, parents=True)
+            (output_path / key / "Presupported").mkdir(exist_ok=True, parents=True)
+
+        (output_path / "Characters" / "Unsupported").mkdir(exist_ok=True, parents=True)
+        (output_path / "Characters" / "Presupported").mkdir(exist_ok=True, parents=True)
