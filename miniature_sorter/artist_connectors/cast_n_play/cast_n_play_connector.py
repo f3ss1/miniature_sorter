@@ -15,13 +15,9 @@ class CastNPlayConnector:
 
     def __init__(
         self,
-        unsupported_location: str = "STL/",
-        presupported_location_stl: str = "Pre-Supported/STL/",
-        presupported_location_lys: str = "Pre-Supported/LYS/",
+        presupported_files_location: str = "Pre-Supported",
     ):
-        self.unsupported_location = unsupported_location
-        self.presupported_location_stl = Path(presupported_location_stl)
-        self.presupported_location_lys = Path(presupported_location_lys)
+        self.presupported_files_location = Path(presupported_files_location)
 
     def process_release(
         self,
@@ -88,20 +84,16 @@ class CastNPlayConnector:
             image_location,
             output_path / f"{clean_model_name}{image_location.suffix}",
         )
-        self._process_unsupported(
-            model_folder_path=model_folder_path,
-            general_output_location=output_path,
-            unsupported_location=self.unsupported_location,
-        )
+        # self._process_unsupported(
+        #    model_folder_path=model_folder_path,
+        #    general_output_location=output_path,
+        #    unsupported_location=None,
+        # )
 
         # TODO: can be missing for bases for example
         self._process_supported(
             model_folder_path=model_folder_path,
             general_output_location=output_path,
-            presupported_locations={
-                "STL": self.presupported_location_stl,
-                "LYS": self.presupported_location_lys,
-            },
         )
 
     @classmethod
@@ -135,7 +127,6 @@ class CastNPlayConnector:
         cls,
         model_folder_path: Path,
         general_output_location: Path,
-        presupported_locations: dict[str, Path],
     ):
         model_name = cls._gather_filename(model_folder_path)
         output_model_location = general_output_location / "Presupported" / model_name
@@ -148,12 +139,7 @@ class CastNPlayConnector:
         output_model_files_location = output_model_location / "Models"
         output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
 
-        for location in presupported_locations.values():
-            if (model_folder_path / location).exists():
-                cls.process_separated(model_folder_path, output_model_files_location, presupported_locations)
-                break
-        else:
-            cls.process_mixed(model_folder_path / "Pre-Supported", output_model_files_location)
+        cls.process_mixed(model_folder_path / "Pre-Supported", output_model_files_location)
 
     @classmethod
     def process_mixed(
@@ -161,33 +147,31 @@ class CastNPlayConnector:
         folder_path: Path,
         output_path: Path,
     ):
-        for model_extension in cls.MODEL_EXTENSIONS_MAP.keys():
-            for path in folder_path.rglob(f"*{model_extension}"):
-                rel = path.relative_to(folder_path)
-                target = output_path / cls.MODEL_EXTENSIONS_MAP[model_extension] / rel
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, target)
+        for model_extension, target_location in cls.MODEL_EXTENSIONS_MAP.items():
+            cls.extract_all_files_of_given_extension(
+                folder_path=folder_path,
+                extension=model_extension,
+                output_path=output_path / target_location,
+                folders_to_remove=list(cls.MODEL_EXTENSIONS_MAP.values()),
+            )
 
-    @classmethod
-    def process_separated(
-        cls,
+    @staticmethod
+    def extract_all_files_of_given_extension(
         folder_path: Path,
+        extension: str,
         output_path: Path,
-        presupported_locations: dict[str, Path],
+        folders_to_remove: list[str],
     ):
-        for file_type, location in presupported_locations.items():
-            if not (folder_path / location).exists():
-                logger.info(f"Failed to find {location} inside {folder_path} folder, skipping it!")
-                continue
+        if not extension.startswith("."):
+            extension = "." + extension
 
-            shutil.copytree(
-                folder_path / location,
-                output_path / file_type.upper(),
-                dirs_exist_ok=True,  # TODO: replace when finished testing
-            )
-            logger.debug(
-                f"Finished moving presupported .{file_type} files: {os.listdir(output_path / file_type.upper())}",
-            )
+        for path in folder_path.rglob(f"*{extension}"):
+            rel = path.relative_to(folder_path)
+            filtered = [p for p in rel.parts if p not in folders_to_remove]
+            rel = Path(*filtered)
+            target = output_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
 
     @classmethod
     def detect_image_location(cls, filepath: Path) -> Path:
