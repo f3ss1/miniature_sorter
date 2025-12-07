@@ -11,7 +11,7 @@ class CastNPlayConnector:
     MODEL_EXTENSIONS_MAP = {
         ".stl": "STL",
         ".lys": "LYS",
-        ".chitu": "CHITU",
+        ".chitubox": "CHITU",
     }
 
     def __init__(
@@ -143,10 +143,6 @@ class CastNPlayConnector:
         model_name = cls._gather_filename(model_folder_path)
         output_model_location = general_output_location / "Presupported" / model_name
         output_model_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
-
-        original_image_location = cls.detect_image_location(model_folder_path)
-        shutil.copy2(original_image_location, output_model_location / f"{model_name}{original_image_location.suffix}")
-        logger.debug(f"Finished moving image: {os.listdir(output_model_location)}")
 
         output_model_files_location = output_model_location / "Models"
         output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
