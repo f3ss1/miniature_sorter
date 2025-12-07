@@ -55,7 +55,7 @@ def test_image_is_being_moved():
 @pytest.mark.skip
 def test_throwback():
     file_path = PROJECT_ROOT / "release"
-    CastNPlayConnector().process_throwback(
+    CastNPlayConnector().process_models(
         file_path,
         PROJECT_ROOT / "result",
     )

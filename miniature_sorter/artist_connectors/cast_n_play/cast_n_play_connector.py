@@ -1,7 +1,7 @@
+from copy import deepcopy
 from pathlib import Path
 import shutil
-import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Collection
 
 from miniature_sorter import logger
 
@@ -17,64 +17,24 @@ class CastNPlayConnector:
     def __init__(
         self,
         presupported_files_location: str = "Pre-Supported",
-    ):
-        self.presupported_files_location = Path(presupported_files_location)
+    ) -> None:
+        self.presupported_files_location = presupported_files_location
 
-    def process_release(
+    def process_models(
         self,
-        release_path: Path,
+        models_path: Path,
         output_path: Path,
         details_dict: dict[str, list[str]] | None = None,
     ) -> None:
-        if details_dict is None:
-            details_dict = {}
-        if "Characters" in details_dict:
-            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict['Characters']}")
-            del details_dict["Characters"]
-
+        details_dict = self.normalize_details(details_dict)
         reversed_details_dict = self.reverse_dict_with_list_values(details_dict)
         self.prepare_folders(output_path, details_dict)
 
-        for file_or_folder in release_path.iterdir():
-            if file_or_folder.is_file():
-                logger.debug(f"Skipping file {file_or_folder} as it is not a folder with model.")
-                continue
+        for model_folder in self._iter_model_folders(models_path):
+            model_type = reversed_details_dict.get(model_folder.name, "Characters")
+            self.process_single_model_folder(model_folder, output_path / model_type)
 
-            model_folder = file_or_folder
-            model_type = reversed_details_dict.get(model_folder, "Characters")
-            self.process_model_folder(model_folder, output_path / model_type)
-
-    def process_throwback(
-        self,
-        throwback_path: Path,
-        output_path: Path,
-        details_dict: dict[str, list[str]] | None = None,
-    ) -> None:
-        if details_dict is None:
-            details_dict = {}
-        if "Characters" in details_dict:
-            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict['Characters']}")
-            del details_dict["Characters"]
-
-        reversed_details_dict = self.reverse_dict_with_list_values(details_dict)
-        self.prepare_folders(output_path, details_dict)
-
-        for file_or_folder in throwback_path.iterdir():
-            if file_or_folder.is_file():
-                logger.debug(f"Skipping file {file_or_folder} as it is not a folder with model.")
-                continue
-
-            # Find the required depth. Sometimes there is a folder in folder (perhaps in a folder)
-            model_folder = file_or_folder
-            model_name = model_folder.name
-            while len(os.listdir(model_folder)) == 1 and os.listdir(model_folder)[0] == model_name:
-                logger.info(f"Going deeper to {model_folder / model_name}.")
-                model_folder = model_folder / model_name
-
-            model_type = reversed_details_dict.get(model_folder, "Characters")
-            self.process_model_folder(model_folder, output_path / model_type)
-
-    def process_model_folder(
+    def process_single_model_folder(
         self,
         model_folder_path: Path,
         output_path: Path,
@@ -95,6 +55,7 @@ class CastNPlayConnector:
         self._process_supported(
             model_folder_path=model_folder_path,
             general_output_location=output_path,
+            presupported_files_location=self.presupported_files_location,
         )
 
     @classmethod
@@ -127,7 +88,7 @@ class CastNPlayConnector:
                 folder_path=folder,
                 extension=".stl",
                 output_path=output_model_files_location / cls.MODEL_EXTENSIONS_MAP[".stl"],
-                folders_to_remove=list(cls.MODEL_EXTENSIONS_MAP.values()),
+                folders_to_remove=set(cls.MODEL_EXTENSIONS_MAP.values()),
             )
 
     @classmethod
@@ -135,6 +96,7 @@ class CastNPlayConnector:
         cls,
         model_folder_path: Path,
         general_output_location: Path,
+        presupported_files_location: str,
     ):
         model_name = cls._gather_filename(model_folder_path)
         output_model_location = general_output_location / "Presupported" / model_name
@@ -145,10 +107,10 @@ class CastNPlayConnector:
 
         for model_extension, target_location in cls.MODEL_EXTENSIONS_MAP.items():
             cls.extract_all_files_of_given_extension(
-                folder_path=model_folder_path / "Pre-Supported",
+                folder_path=model_folder_path / presupported_files_location,
                 extension=model_extension,
                 output_path=output_model_files_location / target_location,
-                folders_to_remove=list(cls.MODEL_EXTENSIONS_MAP.values()),
+                folders_to_remove=set(cls.MODEL_EXTENSIONS_MAP.values()),
             )
 
     @staticmethod
@@ -156,7 +118,7 @@ class CastNPlayConnector:
         folder_path: Path,
         extension: str,
         output_path: Path,
-        folders_to_remove: list[str],
+        folders_to_remove: Collection[str],
     ):
         if not extension.startswith("."):
             extension = "." + extension
@@ -171,7 +133,7 @@ class CastNPlayConnector:
 
     @classmethod
     def detect_image_location(cls, filepath: Path) -> Path:
-        logger.debug(f"Detecting images in {filepath}. List of directory: {os.listdir(filepath)}")
+        logger.debug(f"Detecting images in {filepath}. List of directory: {list(filepath.iterdir())}")
         images_list = [f for f in filepath.iterdir() if f.suffix.lower() in cls.IMAGE_EXTENSIONS and f.is_file()]
         logger.debug(f"Found total {len(images_list)} images in {filepath}: {images_list}")
 
@@ -216,7 +178,7 @@ class CastNPlayConnector:
                 return f"{model_id}. {filename}"
             except ValueError as e:
                 logger.error(f"Failed to gather model name for folder {filepath}:\n{e}")
-                raise e
+                raise
 
     @staticmethod
     def reverse_dict_with_list_values(d: dict) -> dict:
@@ -246,3 +208,39 @@ class CastNPlayConnector:
 
         (output_path / "Characters" / "Unsupported").mkdir(exist_ok=True, parents=True)
         (output_path / "Characters" / "Presupported").mkdir(exist_ok=True, parents=True)
+
+    @staticmethod
+    def normalize_details(
+        details_dict: dict[str, list[str]] | None = None,
+    ) -> dict[str, list[str]]:
+        details_dict_ = deepcopy(details_dict)
+        if details_dict_ is None:
+            details_dict = {}
+        if "Characters" in details_dict:
+            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict['Characters']}")
+            del details_dict_["Characters"]
+
+        return details_dict_
+
+    @classmethod
+    def _iter_model_folders(cls, root: Path) -> Iterable[Path]:
+        for child in root.iterdir():
+            if child.is_file():
+                logger.debug("Skipping file %s as it is not a folder with model.", child)
+                continue
+            folder = child
+            folder = cls._flatten_same_name(folder)
+            yield folder
+
+    @staticmethod
+    def _flatten_same_name(model_folder: Path) -> Path:
+        model_name = model_folder.name
+        while True:
+            entries = [folder for folder in model_folder.iterdir() if folder.is_dir()]
+            if len(entries) != 1 or entries[0] != model_name:
+                break
+
+            logger.info(f"Going deeper to {model_folder / model_name}.")
+            model_folder = model_folder / model_name
+
+        return model_folder
