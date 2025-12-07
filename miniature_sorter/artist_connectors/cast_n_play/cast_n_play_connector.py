@@ -1,6 +1,7 @@
 from pathlib import Path
 import shutil
 import os
+from collections.abc import Iterable
 
 from miniature_sorter import logger
 
@@ -84,11 +85,11 @@ class CastNPlayConnector:
             image_location,
             output_path / f"{clean_model_name}{image_location.suffix}",
         )
-        # self._process_unsupported(
-        #    model_folder_path=model_folder_path,
-        #    general_output_location=output_path,
-        #    unsupported_location=None,
-        # )
+        self._process_unsupported(
+            model_folder_path=model_folder_path,
+            general_output_location=output_path,
+            root_folders_ignore=["Pre-Supported"],
+        )
 
         # TODO: can be missing for bases for example
         self._process_supported(
@@ -101,8 +102,11 @@ class CastNPlayConnector:
         cls,
         model_folder_path: Path,
         general_output_location: Path,
-        unsupported_location: str,
+        root_folders_ignore: Iterable[str] | None,
     ) -> None:
+        if root_folders_ignore is None:
+            root_folders_ignore = []
+
         model_name = cls._gather_filename(model_folder_path)
 
         output_model_location = general_output_location / "Unsupported" / model_name
@@ -115,12 +119,20 @@ class CastNPlayConnector:
         output_model_files_location = output_model_location / "Models"
         output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
 
-        shutil.copytree(
-            model_folder_path / unsupported_location,
-            output_model_files_location,
-            dirs_exist_ok=True,  # TODO: replace when finished testing
-        )
-        logger.debug(f"Finished moving unsupported STL files: {os.listdir(output_model_files_location)}")
+        for file_or_folder in model_folder_path.iterdir():
+            if file_or_folder.is_file():
+                continue
+
+            folder = file_or_folder
+            if folder.name in root_folders_ignore:
+                continue
+
+            cls.extract_all_files_of_given_extension(
+                folder_path=folder,
+                extension=".stl",
+                output_path=output_model_files_location / cls.MODEL_EXTENSIONS_MAP[".stl"],
+                folders_to_remove=list(cls.MODEL_EXTENSIONS_MAP.values()),
+            )
 
     @classmethod
     def _process_supported(
@@ -205,8 +217,14 @@ class CastNPlayConnector:
             return f"{model_id}. {filename}"
 
         except ValueError as e:
-            logger.error(f"Failed to gather model name for folder {filepath}:\n{e}")
-            raise e
+            try:
+                logger.warning(f"Falling back to '. ' as delimiter to detect filename for {filepath}")
+                model_id, filename = filepath.name.split(". ")
+                model_id = int(model_id)
+                return f"{model_id}. {filename}"
+            except ValueError as e:
+                logger.error(f"Failed to gather model name for folder {filepath}:\n{e}")
+                raise e
 
     @staticmethod
     def reverse_dict_with_list_values(d: dict) -> dict:
