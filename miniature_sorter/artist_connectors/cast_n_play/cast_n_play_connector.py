@@ -139,19 +139,11 @@ class CastNPlayConnector:
         output_model_files_location = output_model_location / "Models"
         output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
 
-        cls.process_mixed(model_folder_path / "Pre-Supported", output_model_files_location)
-
-    @classmethod
-    def process_mixed(
-        cls,
-        folder_path: Path,
-        output_path: Path,
-    ):
         for model_extension, target_location in cls.MODEL_EXTENSIONS_MAP.items():
             cls.extract_all_files_of_given_extension(
-                folder_path=folder_path,
+                folder_path=model_folder_path / "Pre-Supported",
                 extension=model_extension,
-                output_path=output_path / target_location,
+                output_path=output_model_files_location / target_location,
                 folders_to_remove=list(cls.MODEL_EXTENSIONS_MAP.values()),
             )
 
