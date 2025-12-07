@@ -112,10 +112,6 @@ class CastNPlayConnector:
         output_model_location = general_output_location / "Unsupported" / model_name
         output_model_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
 
-        original_image_location = cls.detect_image_location(model_folder_path)
-        shutil.copy2(original_image_location, output_model_location / f"{model_name}{original_image_location.suffix}")
-        logger.debug(f"Finished moving image: {os.listdir(output_model_location)}")
-
         output_model_files_location = output_model_location / "Models"
         output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
 
