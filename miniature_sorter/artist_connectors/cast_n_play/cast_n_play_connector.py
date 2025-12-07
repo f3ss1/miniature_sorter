@@ -176,6 +176,10 @@ class CastNPlayConnector:
         presupported_locations: dict[str, Path],
     ):
         for file_type, location in presupported_locations.items():
+            if not (folder_path / location).exists():
+                logger.info(f"Failed to find {location} inside {folder_path} folder, skipping it!")
+                continue
+
             shutil.copytree(
                 folder_path / location,
                 output_path / file_type.upper(),
