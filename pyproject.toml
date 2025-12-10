@@ -9,6 +9,7 @@ license = "MIT"
 dependencies = [
     "loguru>=0.7.3",
     "pytest>=9.0.1",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
