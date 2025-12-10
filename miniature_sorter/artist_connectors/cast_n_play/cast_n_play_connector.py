@@ -54,12 +54,14 @@ class CastNPlayConnector:
             model_folder_path=model_folder_path,
             general_output_location=output_path,
             root_folders_ignore=[self.presupported_files_location],
+            image_absolute_location=image_location,
         )
 
         present_extensions = self._process_supported(
             model_folder_path=model_folder_path,
             general_output_location=output_path,
             presupported_files_location=self.presupported_files_location,
+            image_absolute_location=image_location,
         )
         if len(present_extensions) == 0:
             logger.warning(f"Did not find presupported files for file {model_folder_path}!")
@@ -86,6 +88,7 @@ class CastNPlayConnector:
         model_folder_path: Path,
         general_output_location: Path,
         root_folders_ignore: Iterable[str] | None,
+        image_absolute_location: Path,
     ) -> None:
         if root_folders_ignore is None:
             root_folders_ignore = []
@@ -113,12 +116,18 @@ class CastNPlayConnector:
                 folders_to_remove=set(cls.MODEL_EXTENSIONS_MAP.values()),
             )
 
+        shutil.copy2(
+            src=image_absolute_location,
+            dst=output_model_location / (model_name + image_absolute_location.suffix),
+        )
+
     @classmethod
     def _process_supported(
         cls,
         model_folder_path: Path,
         general_output_location: Path,
         presupported_files_location: str,
+        image_absolute_location: Path,
     ):
         model_name = cls._gather_filename(model_folder_path)
         output_model_location = general_output_location / "Presupported" / model_name
@@ -137,6 +146,11 @@ class CastNPlayConnector:
             )
             if extension_present:
                 present_extensions.append(model_extension)
+
+        shutil.copy2(
+            src=image_absolute_location,
+            dst=output_model_location / (model_name + image_absolute_location.suffix),
+        )
 
         return present_extensions
 
