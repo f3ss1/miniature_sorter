@@ -13,7 +13,7 @@ class RarHandler:
     ) -> None:
 
         if not folder_path.is_dir():
-            raise ValueError("source folder does not exist")
+            raise ValueError("Source folder does not exist!")
 
         # remove existing archive if needed
         if output_path.exists():
