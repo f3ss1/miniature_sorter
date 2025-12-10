@@ -4,6 +4,11 @@ import shutil
 from collections.abc import Iterable, Collection
 
 from miniature_sorter import logger
+from miniature_sorter.artist_connectors.exceptions import (
+    ImageNotFoundException,
+    MultipleImagesFoundException,
+    ModelNameDetectionException,
+)
 
 
 class CastNPlayConnector:
@@ -48,15 +53,32 @@ class CastNPlayConnector:
         self._process_unsupported(
             model_folder_path=model_folder_path,
             general_output_location=output_path,
-            root_folders_ignore=["Pre-Supported"],
+            root_folders_ignore=[self.presupported_files_location],
         )
 
-        # TODO: can be missing for bases for example
-        self._process_supported(
+        present_extensions = self._process_supported(
             model_folder_path=model_folder_path,
             general_output_location=output_path,
             presupported_files_location=self.presupported_files_location,
         )
+        if len(present_extensions) == 0:
+            logger.warning(f"Did not find presupported files for file {model_folder_path}!")
+
+        else:
+            non_supported_file_tree = self.get_file_tree(output_path / "Unsupported" / clean_model_name / "Models")
+            n_non_supported_file_tree = len(non_supported_file_tree)
+            for extension in present_extensions:
+                supported_file_tree = self.get_file_tree(
+                    output_path / "Presupported" / clean_model_name / "Models" / self.MODEL_EXTENSIONS_MAP[extension],
+                )
+                n_supported_file_tree = len(supported_file_tree)
+
+                is_supported_equal_to_non_supported = n_non_supported_file_tree == n_supported_file_tree
+                if not is_supported_equal_to_non_supported:
+                    logger.warning(
+                        f"Found inconsistency in file {model_folder_path}: {n_non_supported_file_tree} in non-supported"
+                        f" vs {n_supported_file_tree} in {self.MODEL_EXTENSIONS_MAP[extension]}",
+                    )
 
     @classmethod
     def _process_unsupported(
@@ -105,13 +127,18 @@ class CastNPlayConnector:
         output_model_files_location = output_model_location / "Models"
         output_model_files_location.mkdir(exist_ok=True)  # TODO: replace when finished testing
 
+        present_extensions = []
         for model_extension, target_location in cls.MODEL_EXTENSIONS_MAP.items():
-            cls.extract_all_files_of_given_extension(
+            extension_present = cls.extract_all_files_of_given_extension(
                 folder_path=model_folder_path / presupported_files_location,
                 extension=model_extension,
                 output_path=output_model_files_location / target_location,
                 folders_to_remove=set(cls.MODEL_EXTENSIONS_MAP.values()),
             )
+            if extension_present:
+                present_extensions.append(model_extension)
+
+        return present_extensions
 
     @staticmethod
     def extract_all_files_of_given_extension(
@@ -119,10 +146,11 @@ class CastNPlayConnector:
         extension: str,
         output_path: Path,
         folders_to_remove: Collection[str],
-    ):
+    ) -> bool:
         if not extension.startswith("."):
             extension = "." + extension
 
+        files_with_extension_present = False
         for path in folder_path.rglob(f"*{extension}"):
             rel = path.relative_to(folder_path)
             filtered = [p for p in rel.parts if p not in folders_to_remove]
@@ -130,6 +158,9 @@ class CastNPlayConnector:
             target = output_path / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, target)
+            files_with_extension_present = True
+
+        return files_with_extension_present
 
     @classmethod
     def detect_image_location(cls, filepath: Path) -> Path:
@@ -139,12 +170,10 @@ class CastNPlayConnector:
 
         if len(images_list) > 1:
             error_message = f"Found more than one image in {filepath}: {images_list}!"
-            logger.error(error_message)
-            raise ValueError(error_message)
+            raise MultipleImagesFoundException(error_message)
         if len(images_list) == 0:
             error_message = f"Failed to find an image in {filepath}!"
-            logger.error(error_message)
-            raise ValueError(error_message)
+            raise ImageNotFoundException(error_message)
 
         return images_list[0]
 
@@ -177,8 +206,7 @@ class CastNPlayConnector:
                 model_id = int(model_id)
                 return f"{model_id}. {filename}"
             except ValueError as e:
-                logger.error(f"Failed to gather model name for folder {filepath}:\n{e}")
-                raise
+                raise ModelNameDetectionException from e
 
     @staticmethod
     def reverse_dict_with_list_values(d: dict) -> dict:
@@ -215,9 +243,9 @@ class CastNPlayConnector:
     ) -> dict[str, list[str]]:
         details_dict_ = deepcopy(details_dict)
         if details_dict_ is None:
-            details_dict = {}
-        if "Characters" in details_dict:
-            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict['Characters']}")
+            details_dict_ = {}
+        if "Characters" in details_dict_:
+            logger.warning(f"Removing 'Characters' as redundant, dropped values: {details_dict_['Characters']}")
             del details_dict_["Characters"]
 
         return details_dict_
@@ -237,10 +265,19 @@ class CastNPlayConnector:
         model_name = model_folder.name
         while True:
             entries = [folder for folder in model_folder.iterdir() if folder.is_dir()]
-            if len(entries) != 1 or entries[0] != model_name:
+            if len(entries) != 1 or entries[0].name != model_name:
                 break
 
-            logger.info(f"Going deeper to {model_folder / model_name}.")
+            logger.debug(f"Going deeper to {model_folder / model_name}.")
             model_folder = model_folder / model_name
 
         return model_folder
+
+    @staticmethod
+    def get_file_tree(path: Path) -> list[Path]:
+        result = []
+        for p in path.rglob("*"):
+            if p.is_file():
+                result.append(p)
+
+        return result
